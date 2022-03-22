@@ -3,7 +3,6 @@ package org.pengfei.hive.listener;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.serialization.LongSerializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 
 import java.util.Properties;
@@ -11,30 +10,22 @@ import java.util.Properties;
 public class HiveMetaProducer {
 
 
-    private final String brokerUrl;
     private final String topicName;
-    private final String ackMode;
-    private final long bufferMemorySize = 33554432;
-    private final String clientId;
-    private final int batchSize;
-    private String compressionType = "snappy";
 
-    private KafkaProducer producer;
+    private final KafkaProducer<String, String> producer;
 
 
     public HiveMetaProducer(String brokerUrl, String topicName, String clientId, String ackMode, int batchSize) {
-        this.brokerUrl = brokerUrl;
         this.topicName = topicName;
-        this.ackMode = ackMode;
-        this.clientId = clientId;
-        this.batchSize = batchSize;
         Properties config = new Properties();
         config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerUrl);
         config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
         config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        long bufferMemorySize = 33554432;
         config.put(ProducerConfig.BUFFER_MEMORY_CONFIG, bufferMemorySize);
         config.put(ProducerConfig.ACKS_CONFIG, ackMode);
         config.put(ProducerConfig.RETRIES_CONFIG, 3);
+        String compressionType = "snappy";
         config.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, compressionType);
         config.put(ProducerConfig.LINGER_MS_CONFIG, 10);
         config.put(ProducerConfig.BATCH_SIZE_CONFIG, batchSize);
@@ -72,7 +63,7 @@ public class HiveMetaProducer {
 //        catch (Exception e) {
 //            producer.abortTransaction();
 //        }
-        producer.send(new ProducerRecord(topicName, key, message));
+        producer.send(new ProducerRecord<>(topicName, key, message));
     }
 
     public void close() {
