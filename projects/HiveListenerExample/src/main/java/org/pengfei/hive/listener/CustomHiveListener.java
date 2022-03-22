@@ -1,134 +1,144 @@
 package org.pengfei.hive.listener;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 import org.apache.hadoop.conf.Configuration;
-
+import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.events.AlterTableEvent;
 import org.apache.hadoop.hive.metastore.MetaStoreEventListener;
 import org.apache.hadoop.hive.metastore.events.CreateTableEvent;
-
 import org.apache.hadoop.hive.metastore.events.DropTableEvent;
-import org.codehaus.jackson.map.ObjectMapper;
+import java.util.HashMap;
+import java.util.Map;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+/**
+ * This class extends MetaStoreEventListener and will be called if a hive action (e.g. create table) happens
+ *
+ * It overrides onCreateTable, onAlterTable, onDropTable, when these events occur, event messages will be sent to
+ * a given kafka cluster.
+ */
+public class CustomHiveListener extends MetaStoreEventListener implements AutoCloseable {
 
-import java.io.BufferedWriter;
-import java.io.Closeable;
-import java.io.FileWriter;
-import java.io.IOException;
-
-public class CustomHiveListener extends MetaStoreEventListener implements Closeable {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(CustomHiveListener.class);
-    private static final ObjectMapper objMapper = new ObjectMapper();
-    private final String output_file_path = "/tmp/hive_listener_output.txt";
+    private static final Gson gson = new GsonBuilder().create();
     private final HiveMetaProducer producer;
+    private final String clusterName;
+    private final String kafkaBrokerUrl;
+    private final String kafkaTopicName;
 
+    public String getClusterName() {
+        return clusterName;
+    }
 
-    public CustomHiveListener(Configuration config) throws IOException {
+    public String getKafkaBrokerUrl() {
+        return kafkaBrokerUrl;
+    }
+
+    public String getKafkaTopicName() {
+        return kafkaTopicName;
+    }
+
+    /**
+     * The constructor first call the constructor of MetaStoreEventListener, then it reads env variable
+     * KAFKA_BROKER_URL, KAFKA_TOPIC_NAME,KUBERNETES_NAMESPACE. At last, it builds a kafka producer
+     *
+     * @param config default MetaStoreEventListener configuration which is provided by hive cluster
+     * @throws IllegalArgumentException if one of the three environment variables is missing
+     */
+    public CustomHiveListener(Configuration config) throws IllegalArgumentException {
         super(config);
-        // logWithHeader(" created ");
-
-        // writeWithHeader(" created ");
         String clientId = Thread.currentThread().getName();
-        String kafkaBrokerUrl = System.getenv("KAFKA_BROKER_URL");
-        String kafkaTopicName = System.getenv("KAFKA_TOPIC_NAME");
+        kafkaBrokerUrl = System.getenv("KAFKA_BROKER_URL");
+        kafkaTopicName = System.getenv("KAFKA_TOPIC_NAME");
+        clusterName = System.getenv("KUBERNETES_NAMESPACE");
         if (kafkaBrokerUrl == null) {
-            kafkaBrokerUrl = "pengfei.org:9092";
-            //throw new IllegalArgumentIOException("environment variable KAFKA_BROKER_URL is required");
+            throw new IllegalArgumentException("environment variable KAFKA_BROKER_URL is required");
         }
         if (kafkaTopicName == null) {
-            kafkaTopicName = "hive-meta";
-            //throw new IllegalArgumentIOException("environment variable KAFKA_TOPIC_NAME is required");
+            throw new IllegalArgumentException("environment variable KAFKA_TOPIC_NAME is required");
+        }
+        if (clusterName == null) {
+            throw new IllegalArgumentException("environment variable KUBERNETES_NAMESPACE is required");
         }
         producer = new HiveMetaProducer(kafkaBrokerUrl, kafkaTopicName, clientId, "-1", 323840);
 
+
     }
 
+    /**
+     * This method will send the createTable event to the kafka cluster along with the hive clusterName.
+     * The message key is : create_table. The message value is the table
+     * @param event The event sent by the hive cluster when a createTable action is called
+     */
     @Override
-    public void onCreateTable(CreateTableEvent event) {
-/**       1. log event */
-//        logWithHeader(event.getTable());
-//        logWithHeader(event.getParameters());
 
-/**       2. write event to local file */
-//        try {
-//            writeWithHeader("In CreateTable");
-//            writeWithHeader(" Table info: ");
-//            writeWithHeader(event.getTable());
-//            writeWithHeader(" event parameters ");
-//            writeWithHeader(event.getParameters());
-//
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//        }
-        /**       3. send event to kafka broker */
-        sendMsgToKafkaBroker("createTable", event.getTable());
+    public void onCreateTable(CreateTableEvent event) {
+
+        // prepare event message
+        JsonElement targetTable = objToJsonObj(event.getTable());
+        targetTable.getAsJsonObject().addProperty("clusterName", this.clusterName);
+        String tableJsonStr = gson.toJson(targetTable);
+        // send event to kafka broker
+        sendMsgToKafkaBroker("create_table", tableJsonStr);
     }
 
+    /**
+     * This method will send the alterTable event to the kafka cluster along with the hive clusterName
+     * The message key is : alter_table. The message value is : the old table before alter and new table after
+     * along with the cluster name
+     * @param event The event sent by the hive cluster when a createTable action is called
+     */
     @Override
     public void onAlterTable(AlterTableEvent event) {
-        /**       1. log event */
-//        logWithHeader(event.getOldTable());
-//        logWithHeader(event.getNewTable());
-        /**       2. write event to local file */
-//        try {
-//            writeWithHeader("In AlterTable");
-//            writeWithHeader(event.getOldTable());
-//            writeWithHeader(event.getNewTable());
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//        }
-        /**       3. send event to kafka broker */
-        sendMsgToKafkaBroker("AlterTableOld", event.getOldTable());
-        sendMsgToKafkaBroker("AlterTableNew",event.getNewTable());
+
+        // for the alter table, in the event we need
+        Map<String, Table> tables = new HashMap<>();
+        tables.put("oldTable", event.getOldTable());
+        tables.put("newTable", event.getNewTable());
+        JsonElement targetTables = objToJsonObj(tables);
+        targetTables.getAsJsonObject().addProperty("clusterName", this.clusterName);
+        String tablesJsonStr = gson.toJson(targetTables);
+        sendMsgToKafkaBroker("alter_table", tablesJsonStr);
     }
 
+    /**
+     * This method will send the dropTable event to the kafka cluster along with the hive clusterName
+     * The message key is : drop_table. The message value is : the table along with the cluster name
+     * @param event The event sent by the hive cluster when a createTable action is called
+     */
     @Override
     public void onDropTable(DropTableEvent event) {
-        /**       1. log event */
-        // logWithHeader(event.getDeleteData());
-        /**       2. write event to local file */
-//        try {
-//            writeWithHeader(" In DropTable ");
-//            writeWithHeader(event.getDeleteData()); //return true if the table drop in success
-//            writeWithHeader(event.getTable()); //return the table that has been dropped
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//        }
-        /**       3. send event to kafka broker */
-        sendMsgToKafkaBroker("DropTable", event.getTable());
+        JsonElement targetTable = objToJsonObj(event.getTable());
+        targetTable.getAsJsonObject().addProperty("clusterName", this.clusterName);
+        String tableJsonStr = gson.toJson(targetTable);
+        sendMsgToKafkaBroker("drop_table", tableJsonStr);
     }
 
-    private String buildLogMessage(Object obj) {
-        return "[CustomListener][Thread: " + Thread.currentThread().getName() + "] | " + objToStr(obj);
+
+    /**
+     * This method sends msg to kafka cluster
+     *
+     * @param eventType The message key which is the hive event type
+     * @param msg The message value which is the hive event value
+     */
+    private void sendMsgToKafkaBroker(String eventType, String msg) {
+        producer.sendMsg(eventType, msg);
     }
 
-    private void logWithHeader(Object obj) {
-        LOGGER.info(buildLogMessage(obj));
+    /**
+     * @param obj Serialize an obj to JsonElement by using gson
+     * @return a JsonElement
+     */
+    private JsonElement objToJsonObj(Object obj) {
+        return gson.toJsonTree(obj);
     }
 
-    private void writeWithHeader(Object obj) throws IOException {
-        BufferedWriter writer = new BufferedWriter(new FileWriter(output_file_path, true));
-        writer.write(buildLogMessage(obj));
-        writer.close();
-    }
 
-    private void sendMsgToKafkaBroker(String eventType, Object obj) {
-        producer.sendMsg(eventType, objToStr(obj));
-    }
-
-    private String objToStr(Object obj) {
-        try {
-            return objMapper.writeValueAsString(obj);
-        } catch (IOException e) {
-            LOGGER.error("Error on conversion", e);
-        }
-        return null;
-    }
-
+    /**
+     * Auto close kafka producer after hive shutdown
+     */
     @Override
-    public void close() throws IOException {
+    public void close() {
         producer.close();
     }
 }
