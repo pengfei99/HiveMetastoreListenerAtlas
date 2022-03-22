@@ -76,7 +76,9 @@ public class CustomHiveListener extends MetaStoreEventListener implements AutoCl
 
         // prepare event message
         JsonElement targetTable = objToJsonObj(event.getTable());
+        // to add property, we need to access the json object of the table
         targetTable.getAsJsonObject().addProperty("clusterName", this.clusterName);
+        // convert JsonElement to json string
         String tableJsonStr = gson.toJson(targetTable);
         // send event to kafka broker
         sendMsgToKafkaBroker("create_table", tableJsonStr);
@@ -130,6 +132,7 @@ public class CustomHiveListener extends MetaStoreEventListener implements AutoCl
      * @return a JsonElement
      */
     private JsonElement objToJsonObj(Object obj) {
+        // get an JsonElement (Tree representation of the object) of the object
         return gson.toJsonTree(obj);
     }
 
