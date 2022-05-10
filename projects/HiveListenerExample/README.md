@@ -1,12 +1,12 @@
-# Custom hive listener
+# Use this custom hive listener
 
-## Build jar 
+## Step1. Build jar 
 
 ```shell
 mvn assembly:assembly
 ```
 
-## Add jar to hive metastore
+## Step2. Add jar to hive metastore
 
 ### Add jar permanently (for production)
 In this mode, the config will persist even if you restart the hive metastore
@@ -49,4 +49,26 @@ set hive.exec.post.hooks=org.pengfei.hive.hook.CustomHiveHook;
 -- set listener to custom jar
 set hive.metastore.event.listeners=org.pengfei.hive.listener.CustomHiveListener;
 
+```
+
+
+## Step 3. Set up kafka cluster
+
+To run this custom hive listener, you need to set up a kafka cluster and get two important information.
+- kafka_broker_url
+- topic_name
+
+## Step 4. Set up env var 
+You need to set up three env var in the hive cluster
+
+- KAFKA_BROKER_URL 
+- KAFKA_TOPIC_NAME
+- DOMAIN_NAMESPACE
+
+below is an example:
+
+```shell
+export KAFKA_BROKER_URL=hadoop1.insee.fr:9092,hadoop2.insee.fr:9092,hadoop3.insee.fr:9092
+export KAFKA_TOPIC_NAME=hive-meta
+export DOMAIN_NAMESPACE=user-toto
 ```
