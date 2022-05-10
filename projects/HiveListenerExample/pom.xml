@@ -5,8 +5,8 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>groupId</groupId>
-    <artifactId>HiveListenerExample</artifactId>
-    <version>0.1</version>
+    <artifactId>HiveListener</artifactId>
+    <version>0.0.1</version>
     <packaging>jar</packaging>
     <name>hive-metastore-listener</name>
 
