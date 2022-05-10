@@ -50,7 +50,7 @@ public class CustomHiveListener extends MetaStoreEventListener implements AutoCl
         String clientId = Thread.currentThread().getName();
         kafkaBrokerUrl = System.getenv("KAFKA_BROKER_URL");
         kafkaTopicName = System.getenv("KAFKA_TOPIC_NAME");
-        clusterName = System.getenv("KUBERNETES_NAMESPACE");
+        clusterName = System.getenv("DOMAIN_NAMESPACE");
         if (kafkaBrokerUrl == null) {
             throw new IllegalArgumentException("environment variable KAFKA_BROKER_URL is required");
         }
