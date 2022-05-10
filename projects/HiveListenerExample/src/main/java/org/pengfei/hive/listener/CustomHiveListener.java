@@ -81,7 +81,7 @@ public class CustomHiveListener extends MetaStoreEventListener implements Closea
 //        }
         /**       3. send event to kafka broker */
         sendMsgToKafkaBroker("AlterTableOld", event.getOldTable());
-        sendMsgToKafkaBroker("AlterTableNew",event.getNewTable());
+        sendMsgToKafkaBroker("AlterTableNew", event.getNewTable());
     }
 
     @Override
