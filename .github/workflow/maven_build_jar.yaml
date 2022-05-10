@@ -32,4 +32,4 @@ jobs:
       run: |
           ls .
           mc alias set s3 ${{ secrets.AWS_S3_ENDPOINT }} ${{ secrets.AWS_ACCESS_KEY_ID }} ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          mc cp ./target/HiveListener-0.0.1.jar projet-onyxia/build/hive-listener/HiveListener-0.0.1.jar
+          mc cp ./target/HiveListener-0.0.1.jar s3/projet-onyxia/build/hive-listener/hive-listener-${{ github.event.release.tag_name }}.jar
